@@ -1,4 +1,10 @@
+
 import { releaseRepository as repo } from "../repositories/release.repository.js";
+import {
+  getCached,
+  setCached,
+  invalidateCache,
+} from "../utils/cache.js";
 
 const STEP_TITLES = [
   "Requirements finalized",
@@ -53,14 +59,38 @@ async function formatRelease(row) {
   };
 }
 
+const releaseKey = (id) => `release:${id}`;
+
 export const releaseService = {
   async getAll() {
+    const cached = getCached("releases:all");
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
     const rows = await repo.findAll();
-    return Promise.all(rows.map(formatRelease));
+    const releases = await Promise.all(rows.map(formatRelease));
+
+    setCached("releases:all", releases);
+    return releases;
   },
 
   async getById(id) {
-    return formatRelease(await repo.findById(id));
+    const key = releaseKey(id);
+    const cached = getCached(key);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const release = await formatRelease(await repo.findById(id));
+
+    if (release) {
+      setCached(key, release);
+    }
+
+    return release;
   },
 
   async create(input) {
@@ -68,12 +98,15 @@ export const releaseService = {
 
     if (!name) throw new Error("Release name is required");
 
+    validateDate(input.dueDate);
+
     const row = await repo.create({
       name,
       dueDate: validateDate(input.dueDate),
       additionalInfo: input.additionalInfo ?? null,
     });
 
+    invalidateCache();
     return this.getById(row.id);
   },
 
@@ -96,6 +129,8 @@ export const releaseService = {
     }
 
     const row = await repo.update(id, updates);
+
+    invalidateCache();
     return formatRelease(row);
   },
 
@@ -112,10 +147,17 @@ export const releaseService = {
       throw new Error("Step not found");
     }
 
+    invalidateCache();
     return this.getById(releaseId);
   },
 
   async delete(id) {
-    return repo.delete(id);
+    const deleted = await repo.delete(id);
+
+    if (deleted) {
+      invalidateCache();
+    }
+
+    return deleted;
   },
 };

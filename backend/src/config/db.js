@@ -1,19 +1,28 @@
-import "dotenv/config";
 import pg from "pg";
+import "dotenv/config";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not configured");
-}
-
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 5,
+  max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-pool.on("error", (error) => {
-  console.error("Unexpected PostgreSQL pool error:", error);
+pool.on("connect", () => {
+  console.log("PostgreSQL connection established");
+});
+
+pool.on("remove", () => {
+  console.log("PostgreSQL connection removed from pool");
+});
+
+pool.on("error", (err) => {
+  console.error("Unexpected idle PostgreSQL client error:", err.message);
 });
