@@ -1,31 +1,26 @@
+
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@as-integrations/express5";
+import { typeDefs } from "./graphql/schema.js";
+import { resolvers } from "./graphql/resolvers.js";
+import { requestLogger } from "./middleware/requestLogger.js";
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-const typeDefs = `#graphql
-  type Query {
-    health: String!
-  }
-`;
-
-const resolvers = {
-  Query: {
-    health: () => "Release Checklist API is running",
-  },
-};
-
-const apollo = new ApolloServer({
-  typeDefs,
-  resolvers,
-});
+const apollo = new ApolloServer({ typeDefs, resolvers });
 
 async function startServer() {
   await apollo.start();
+
+  // Register logging before all routes.
+  app.use(requestLogger);
+
+  app.use(cors());
+  app.use(express.json());
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
@@ -33,8 +28,6 @@ async function startServer() {
 
   app.use(
     "/graphql",
-    cors(),
-    express.json(),
     expressMiddleware(apollo)
   );
 
